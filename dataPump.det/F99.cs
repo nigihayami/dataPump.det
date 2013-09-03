@@ -30,6 +30,10 @@ namespace dataPump.det
         string p_text = "";
         int p_cur_2 = 0;
         string p_text_2 = "";
+        //data
+        bool is_close_analize = false;
+        int qt_count = 0;
+        int qt_ins = 0;
         #endregion
         #region Соединения
         FbConnectionStringBuilder fc_old = new FbConnectionStringBuilder();
@@ -413,7 +417,7 @@ namespace dataPump.det
                 sb.AppendLine(ex.Message);              
             }
         }
-        public bool chech_connection(string database)
+        public bool try_connection(string database)
         {
             bool yes_ = true;
             //в любом случае копируем базу!
@@ -595,6 +599,8 @@ namespace dataPump.det
         List<string> com = new List<string> { };//первые комманды - без триггеров
         List<string> com2 = new List<string> { };//наборы данных
         List<string> com3 = new List<string> { };//завершающий набор
+
+        Queue<string> q_data = new Queue<string> { };
 
         List<string> com_udf = new List<string> { };
         List<string> com_domains = new List<string> { };
@@ -1230,43 +1236,19 @@ namespace dataPump.det
                 SetImage(2, "Node3_3");
                 int i_ = 0;
                 int j_ = tables_.Count;
-                this.progressBar2.Maximum = j_;
+                this.progressBar2.Maximum = 100;
                 this.progressBar2.Visible = true;
                 this.l_count.Visible = true;
                 //второй этап - данные
-                foreach (string table_n in tables_)
-                {
-                    i_++;
+                //запускаем анализ
+                Task t_prepare = new Task(go_data);
+                t_prepare.Start();
+                //запускаем создание записей на базе
+                Task t_load = new Task(go_load);
+                t_load.Start();
 
-                    p_cur = 0;//нижний прогресс с количеством записей
-                    p_cur_2++;//прогресс таблиц
-                    
-                    string t = i_.ToString() + "/" + j_ + " " + table_n;
-                    
-                    p_text = "ANALYZE " + table_n;//как бы сообщаем что анализ                   
-                    p_text_2  = t; //а это информация о пройденных этапах
+                await t_load;
 
-                    table_name = table_n;//название таблицы, для процедуры копирования
-                    
-                    skip_ = 0;
-                    int count_ = data_count();
-                    
-                    while (count_ != 0 && skip_ <= count_)
-                    {
-                        p_text_2 = t + " " + skip_.ToString() + "/" + count_.ToString();
-                        com2.Clear();//очистим список значений
-                        //берем по 100к
-                        Action aD = new Action(PREPARE_DATA);
-                        await Task.Run(aD);
-                        aD = null;
-                        //теперь накатим данные
-                        
-                        aD = new Action(COPY_DATA);
-                        await Task.Run(aD);
-                        aD = null;
-                        skip_ += 100000; //увеличиваем пропуск на 100 000
-                    }
-                }
                 this.progressBar2.Visible = false;
                 this.l_count.Visible = false;
                 com2.Clear();//очистим список значений - re:
@@ -2787,6 +2769,175 @@ namespace dataPump.det
         }
         #endregion
         #region EXECUTE DATA
+        public void go_data()
+        {
+            //запускаем заполнение списка
+            using (FbConnection fb = new FbConnection(fc_old.ConnectionString))
+            {
+                try
+                {
+                    fb.Open();
+                    int i_ = 0;
+                    int j_ = tables_.Count;
+                    foreach (string t_ in tables_)
+                    {
+                        i_++;
+                        p_text = i_.ToString() + "/" + j_.ToString() + " " + t_; //прогресс таблиц
+                        p_cur = (int)(((float)i_ / (float)j_) * 100);
+
+                        using (FbTransaction ft = fb.BeginTransaction())
+                        {
+                            using (FbCommand fcon = new FbCommand("Select * from " + t_,fb,ft))
+                            {
+                                switch (t_.Trim().ToUpper())
+                                {
+                                    case "DELETED":
+                                        fcon.CommandText += " where Date_Deleted >= cast('NOW' as date) - 180";
+                                        break;
+                                    case "ERR_LOG":
+                                        fcon.CommandText += " where id_err_log is null";
+                                        break;
+                                    case "BACKUP_LOG":
+                                        fcon.CommandText += " where id_BACKUP_LOG is null";
+                                        break;
+                                    case "SHADOWGUARD":
+                                        fcon.CommandText += " where id_SHADOW is null";
+                                        break;
+                                    case "USER_ACTIVITY":
+                                        fcon.CommandText += " where id_user_activity is null";
+                                        break;
+                                    case "MESSAGES":
+                                        fcon.CommandText += " where lastdate >= cast('NOW' as date) - 100";
+                                        break;
+                                    case "SCHEDULER":
+                                        fcon.CommandText += " where id_status is null";
+                                        break;
+                                    case "USER_CONNECTIONS":
+                                        fcon.CommandText += " where ID_USER_CONNECTIONS is null";
+                                        break;
+                                    case "REPORT_REPLICATION":
+                                        fcon.CommandText += " where DATE_CREATE >= cast('NOW' as date) - 30";
+                                        break;
+                                }
+                                using (FbDataReader fr = fcon.ExecuteReader())
+                                {
+                                    while (fr.Read())
+                                    {
+                                        var sqlinsert = "insert into " + t_ + " values(";
+                                        for (int t = 0; t <= fr.FieldCount - 1; t++)
+                                        {
+                                            if (sqlinsert != "insert into " + t_ + " values(")
+                                            {
+                                                sqlinsert += ",";
+                                            }
+                                            if (fr[t] == DBNull.Value)
+                                            {
+                                                sqlinsert += "null";
+                                            }
+                                            else
+                                            {
+                                                if (fr[t].GetType().ToString().ToUpper() == "SYSTEM.DOUBLE")
+                                                {
+
+                                                    sqlinsert += fr[t].ToString().Replace(",", ".");
+                                                }
+                                                else
+                                                    //заменяем все ' на ''
+                                                    sqlinsert += "'" + fr[t].ToString().Replace("'", "''").Replace(" 0:00:00", " ") + "'";
+                                            }
+                                        }
+                                        sqlinsert += ");";
+                                        
+                                        qt_count++;//для прогресса
+                                        lock (q_data)
+                                        {
+                                            q_data.Enqueue(sqlinsert);//добавляем INSERT
+                                        }
+                                    }
+                                    fr.Dispose();
+                                }
+                                fcon.Dispose();
+                            }
+                            ft.Commit();
+                            ft.Dispose();
+                        }
+                    }
+                    p_text = "Анализ данных завершен"; //конец анализа
+                    p_cur = 100;
+                    is_close_analize = true;//флаг, что анализ данных завершен
+
+                }
+                catch (FbException ex)
+                {
+                    sb.AppendLine("");
+                    sb.AppendLine(ex.Message);
+                }
+                finally
+                {
+                    fb.Close();
+                }
+                fb.Dispose();
+            }
+        }
+        public void go_load()
+        {
+            using (FbConnection fb = new FbConnection(fc_new.ConnectionString))
+            {
+                try
+                {
+                    fb.Open();
+                    while ((!is_close_analize) || (q_data.Count != 0))
+                    {
+                        lock (q_data)
+                        {
+                            q_data.TrimExcess();
+                        }
+                        //до тех пор пока идет анализ
+                        //или анализ завершен, но есть данные
+                        int i_ = 0;
+                        //пока выполняется анализ и пока у нас есть данные
+                        using (FbTransaction ft = fb.BeginTransaction())
+                        {
+                            using (FbCommand fcon = new FbCommand())
+                            {
+                                fcon.Connection = fb;
+                                fcon.Transaction = ft;
+                                //по 10к записей, так намного быстрее
+                                while (i_ <= 10000)
+                                {
+                                    i_++;
+                                    if (q_data.Count !=0)
+                                    {
+                                        qt_ins++;
+                                        lock (q_data)
+                                        {
+                                            fcon.CommandText = q_data.Dequeue();
+                                        }
+                                        fcon.ExecuteNonQuery();
+                                        p_cur_2 = (int)(((float)qt_ins / (float)qt_count) * 100);
+                                        p_text_2 = p_cur_2.ToString() + @"%";
+                                    }
+                                }
+                                fcon.Dispose();
+                            }
+                            ft.Commit();
+                            ft.Dispose();
+                        }
+                        
+                    }
+                }
+                catch (FbException ex)
+                {
+                    sb.AppendLine("");
+                    sb.AppendLine(ex.Message);
+                }
+                finally
+                {
+                    fb.Close();
+                }
+                fb.Dispose();
+            }
+        }
         public int data_count()
         {
             int count_ = 0;
