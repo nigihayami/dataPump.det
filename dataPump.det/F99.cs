@@ -716,7 +716,7 @@ namespace dataPump.det
         string sql_triggers = "select T.RDB$TRIGGER_NAME, T.RDB$RELATION_NAME, T.RDB$TRIGGER_SEQUENCE, T.RDB$TRIGGER_TYPE, T.RDB$TRIGGER_SOURCE," +
                               "        T.RDB$TRIGGER_INACTIVE" +
                               " from RDB$TRIGGERS T " +
-                              " where T.RDB$SYSTEM_FLAG = 0  ";
+                              " where T.Rdb$system_flag IS NULL OR T.Rdb$system_flag = 0  ";
         string sql_triggers_b = "select t.RDB$TRIGGER_SOURCE from RDB$TRIGGERS T where t.rdb$TRIGGER_NAME = @a ";//trigger name
         string sql_primary_key = "select R.RDB$CONSTRAINT_NAME, R.RDB$RELATION_NAME, R.RDB$INDEX_NAME " +
                                                           "  from RDB$RELATION_CONSTRAINTS R " +
