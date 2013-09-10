@@ -32,8 +32,6 @@ namespace dataPump.det
         string p_text_2 = "";
         //data
         bool is_close_analize = false;
-        int qt_count = 0;
-        int qt_ins = 0;
         #endregion
         #region Соединения
         FbConnectionStringBuilder fc_old = new FbConnectionStringBuilder();
@@ -600,7 +598,7 @@ namespace dataPump.det
         List<string> com2 = new List<string> { };//наборы данных
         List<string> com3 = new List<string> { };//завершающий набор
 
-        Queue<string> q_data = new Queue<string> { };
+        private Queue<string> q_data = new Queue<string> { };
 
         List<string> com_udf = new List<string> { };
         List<string> com_domains = new List<string> { };
@@ -963,10 +961,12 @@ namespace dataPump.det
                         this.p_load.Visible = true;
 
                         Sett.Default.database_original = this.t_database.Text;
+                        Sett.Default.database_tmp = this.t_database.Text;
+                        /*
                         Sett.Default.database_tmp = temp_folder + @"\tsql_tmp.gdb";
                         Action a_c = new Action(copy_);
                         await Task.Run(a_c);
-
+                        */
                         SetImage(2, "Node3");
                         //если нужно конвертировать базу
                         // Старая база
@@ -1163,36 +1163,37 @@ namespace dataPump.det
             Task t_indexes = new Task(m_INDEXES);
 
             t_udf.Start();
-            t_domains.Start();
-            t_generators.Start();
-            t_exceptions.Start();
-            t_roles.Start();
-            t_tables.Start();
-            t_views.Start();
-            t_procedures_prototype.Start();
-            t_triggers_prototype.Start();
-            t_grants.Start();
-            t_procedures_content.Start();
-            t_triggers_content.Start();
-            t_primary_key.Start();
-            t_foreign_key.Start();
-            t_indexes.Start();
-
-            
             await t_udf;
+            t_domains.Start();
             await t_domains;
+            t_generators.Start();
             await t_generators;
+            t_exceptions.Start();
             await t_exceptions;
+            t_roles.Start();
             await t_roles;
+            t_tables.Start();
             await t_tables;
+            t_views.Start();
             await t_views;
+
+            t_procedures_prototype.Start();
             await t_procedures_prototype;
+            t_triggers_prototype.Start();
             await t_triggers_prototype;
+
+            t_grants.Start();
             await t_grants;
+            t_procedures_content.Start();
             await t_procedures_content;
+            t_triggers_content.Start();
             await t_triggers_content;
+
+            t_primary_key.Start();
             await t_primary_key;
+            t_foreign_key.Start();
             await t_foreign_key;
+            t_indexes.Start();        
             await t_indexes;
 
             //а вот теперь сформируем основные комманды
@@ -1243,11 +1244,8 @@ namespace dataPump.det
                 //запускаем анализ
                 Task t_prepare = new Task(go_data);
                 t_prepare.Start();
-                //запускаем создание записей на базе
-                Task t_load = new Task(go_load);
-                t_load.Start();
 
-                await t_load;
+                await t_prepare;
 
                 this.progressBar2.Visible = false;
                 this.l_count.Visible = false;
@@ -2846,12 +2844,18 @@ namespace dataPump.det
                                                     sqlinsert += "'" + fr[t].ToString().Replace("'", "''").Replace(" 0:00:00", " ") + "'";
                                             }
                                         }
-                                        sqlinsert += ");";
-                                        
-                                        qt_count++;//для прогресса
-                                        lock (q_data)
+                                        sqlinsert += ");";                                       
+                                        q_data.Enqueue(sqlinsert);//добавляем INSERT                                        
+                                        if (q_data.Count >= 100000)
                                         {
-                                            q_data.Enqueue(sqlinsert);//добавляем INSERT
+                                            //запускаем создание записей на базе
+                                            using (Task t_load = new Task(go_load))
+                                            {
+                                                t_load.Start();
+                                                t_load.Wait();
+                                                t_load.Dispose();
+                                                q_data.Clear();
+                                            }
                                         }
                                     }
                                     fr.Dispose();
@@ -2861,6 +2865,14 @@ namespace dataPump.det
                             ft.Commit();
                             ft.Dispose();
                         }
+                    }
+                    //и в конце запустим еще раз
+                    using (Task t_load = new Task(go_load))
+                    {
+                        t_load.Start();
+                        t_load.Wait();
+                        t_load.Dispose();
+                        q_data.Clear();
                     }
                     p_text = "Анализ данных завершен"; //конец анализа
                     p_cur = 100;
@@ -2886,44 +2898,24 @@ namespace dataPump.det
                 try
                 {
                     fb.Open();
-                    while ((!is_close_analize) || (q_data.Count != 0))
+                    int _i = 0;
+                    int _j = q_data.Count;
+                    using (FbTransaction ft = fb.BeginTransaction())
                     {
-                        lock (q_data)
+                        using (FbCommand fcon = new FbCommand("", fb, ft))
                         {
-                            q_data.TrimExcess();
-                        }
-                        //до тех пор пока идет анализ
-                        //или анализ завершен, но есть данные
-                        int i_ = 0;
-                        //пока выполняется анализ и пока у нас есть данные
-                        using (FbTransaction ft = fb.BeginTransaction())
-                        {
-                            using (FbCommand fcon = new FbCommand())
+                            while (q_data.Count != 0)
                             {
-                                fcon.Connection = fb;
-                                fcon.Transaction = ft;
-                                //по 10к записей, так намного быстрее
-                                while (i_ <= 10000)
-                                {
-                                    i_++;
-                                    if (q_data.Count !=0)
-                                    {
-                                        qt_ins++;
-                                        lock (q_data)
-                                        {
-                                            fcon.CommandText = q_data.Dequeue();
-                                        }
-                                        fcon.ExecuteNonQuery();
-                                        p_cur_2 = (int)(((float)qt_ins / (float)qt_count) * 100);
-                                        p_text_2 = p_cur_2.ToString() + @"%";
-                                    }
-                                }
-                                fcon.Dispose();
+                                _i++;
+                                p_cur_2 = (int)(((float)_i / (float)_j) * 100);
+                                p_text_2 = p_cur_2.ToString() + @"%";
+                                fcon.CommandText = q_data.Dequeue();
+                                fcon.ExecuteNonQuery();
                             }
-                            ft.Commit();
-                            ft.Dispose();
+                            fcon.Dispose();
                         }
-                        
+                        ft.Commit();
+                        ft.Dispose();
                     }
                 }
                 catch (FbException ex)
