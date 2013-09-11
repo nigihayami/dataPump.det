@@ -271,16 +271,9 @@ namespace dataPump.det
         bool is_reserv(string st)
         {
             //зарезервированное слово?
-            bool is_find = false;
-            foreach (string x in list_reserv)
-            {
-                if (x == st.Trim())
-                {
-                    is_find = true;
-                }
-            }
-            return is_find;
+            return list_reserv.Contains(st.Trim());
         }
+
         private void SetText(int val_, string text)
         {
             // InvokeRequired required compares the thread ID of the 
