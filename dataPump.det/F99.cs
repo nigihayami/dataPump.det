@@ -38,11 +38,7 @@ namespace dataPump.det
         FbConnectionStringBuilder fc_new = new FbConnectionStringBuilder();
         string temp_folder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
                             + @"\det\temp\Setup\DB\"
-                            + DateTime.Today.ToString("yyyy")
-                            + DateTime.Today.ToString("MM")
-                            + DateTime.Today.ToString("dd")
-                            + DateTime.Now.ToString("HH")
-                            + DateTime.Now.ToString("mm");
+                            + DateTime.Now.ToString("yyyyMMddHHmm");
         string database_new = "";
         #endregion        
         #region Ошибки
@@ -259,40 +255,25 @@ namespace dataPump.det
 
             return FIELD_SOURCE;
         }
+
         bool is_en_string(string st)
         {
             //проверяет - состоит ли строка только из English
-            bool is_en = true;
-            for (int i = 0; i <= st.Length - 1; i++)
-            {
-                bool is_find = false;
-                foreach (string x in list_en)
-                {
-                    if (x == st[i].ToString())
-                    {
-                        is_find = true;
-                    }
-                }
-                if (!is_find)
-                {
-                    is_en = false;
-                }
+            for (int i = 0; i <= st.Length - 1; i++) {
+                if (!list_en.Contains(st[i])) return false;
             }
-            return is_en;
+            // На самом деле в данном случае можно обойтись одной регуляркой, а именно:
+            //return Regex.IsMatch(st, @"^\w+$");
+
+            return true;
         }
+
         bool is_reserv(string st)
         {
             //зарезервированное слово?
-            bool is_find = false;
-            foreach (string x in list_reserv)
-            {
-                if (x == st.ToString().Trim())
-                {
-                    is_find = true;
-                }
-            }
-            return is_find;
+            return list_reserv.Contains(st.Trim());
         }
+
         private void SetText(int val_, string text)
         {
             // InvokeRequired required compares the thread ID of the 
@@ -300,7 +281,7 @@ namespace dataPump.det
             // If these threads are different, it returns true. 
             if (this.progressBar1.InvokeRequired)
             {
-                SetTextCallback d = new SetTextCallback(SetText);
+                SetTextCallback d = SetText;
                 this.Invoke(d, new object[] { val_, text });
             }
             else
@@ -316,7 +297,7 @@ namespace dataPump.det
             // If these threads are different, it returns true. 
             if (this.treeView1.InvokeRequired)
             {
-                SetImageCallback d = new SetImageCallback(SetImage);
+                SetImageCallback d = SetImage;
                 this.Invoke(d, new object[] { val_, text });
             }
             else
@@ -562,10 +543,10 @@ namespace dataPump.det
         #endregion
         #region Наборы
         //символы
-        string[] list_en = {"A","B","C","D","E","F","G","H","I","J","K","L","M"
-                             ,"N","O","P","Q","R","S","T","U","V","W","X","Y","Z"
-                             ,"1","2","3","4","5","6","7","8","9"
-        					 ,"_"};
+        char[] list_en = {'A','B','C','D','E','F','G','H','I','J','K','L','M'
+                             ,'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'
+                             ,'1','2','3','4','5','6','7','8','9'
+        					 ,'_'};
         string[] list_reserv = {"ABSOLUTE","ACTION","ABORT","ACTIVE","ADD","AFTER","ALL","ALLOCATE","ALTER","ANALYZE","AND","ANY","ARE","AS","ASC","ASCENDING","ASSERTION","AT","AUTHORIZATION","AUTO","AUTO_INCREMENT","AUTOINC","AVG",
                                 "BACKUP","BEFORE","BEGIN","BETWEEN","BIGINT","BINARY","BIT","BLOB","BOOLEAN","BOTH","BREAK","BROWSE","BULK","BY","BYTES",
                                 "CACHE","CALL","CASCADE","CASCADED","CASE","CAST","CATALOG","CHANGE","CHAR","CHARACTER","CHARACTER_LENGTH","CHECK","CHECKPOINT","CLOSE","CLUSTER","CLUSTERED","COALESCE","COLLATE","COLUMN","COLUMNS","COMMENT","COMMIT","COMMITTED","COMPUTE","COMPUTED","CONDITIONAL","CONFIRM","CONNECT","CONNECTION","CONSTRAINT","CONSTRAINTS","CONTAINING","CONTAINS","CONTAINSTABLE","CONTINUE","CONTROLROW","CONVERT","COPY","COUNT","CREATE","CROSS","CSTRING","CUBE","CURRENT","CURRENT_DATE","CURRENTJTIME","CURRENT_TIMESTAMP","CURRENT_USER","CURSOR",
@@ -1041,7 +1022,7 @@ namespace dataPump.det
 
                                 //while(f.Attributes == FileAttributes.
                                 SetImage(2, "Node3_5");
-                                Action a_r = new Action(run_replace);
+                                Action a_r = run_replace;
                                 await Task.Run(a_r);
                                 SetImage(3, "Node3_5");
                             }
@@ -1054,7 +1035,7 @@ namespace dataPump.det
                     {
                         SetImage(2, "Node4");
                         this.l_.Text = "Восстановление пользователей";
-                        Action a = new Action(run_user);
+                        Action a = run_user;
                         await Task.Run(a);
                         SetImage(3, "Node4");
                     }
@@ -1225,7 +1206,7 @@ namespace dataPump.det
             //Первый этап создания - основные DDL
             SetImage(2, "Node3_2");
             this.progressBar1.Value = 0;
-            Action a = new Action(execute_com);
+            Action a = execute_com;
             await Task.Run(a);
             a = null;
             com.Clear();
@@ -1255,7 +1236,7 @@ namespace dataPump.det
                 SetImage(2, "Node3_4");
                 com = com3;
                 this.progressBar1.Value = 0;
-                a = new Action(execute_com);
+                a = execute_com;
                 await Task.Run(a);
                 a = null;
                 com.Clear();
