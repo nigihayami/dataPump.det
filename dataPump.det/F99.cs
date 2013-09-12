@@ -2319,10 +2319,9 @@ namespace dataPump.det
                                             fcon_b.Parameters[0].Value = fr[0].ToString();
                                             using (FbDataReader fr_b = fcon_b.ExecuteReader())
                                             {
-                                                while (fr_b.Read())
-                                                {
-                                                    dll_command += "\n" + regexTrim.Replace(fr_b.GetString(0), "TRIM_");
-                                                    dll_command = regexIIF.Replace(dll_command, "IIF_");
+                                                while (fr_b.Read()) {
+                                                    string line = "\n" + regexTrim.Replace(fr_b.GetString(0), "TRIM_");
+                                                    dll_command += regexIIF.Replace(line, "IIF_");
                                                     //.Replace("TRIM", "TRIM_").Replace("Trim", "TRIM_").Replace("trim", "TRIM_").Replace("IIF", "IIF_").Replace("iif", "IIF_").Replace("Iif", "IIF_");
                                                 }
                                                 fr_b.Dispose();
