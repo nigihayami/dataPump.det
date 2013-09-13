@@ -273,7 +273,6 @@ namespace dataPump.det
             //зарезервированное слово?
             return list_reserv.Contains(st.Trim());
         }
-
         private void SetText(int val_, string text)
         {
             // InvokeRequired required compares the thread ID of the 
@@ -1532,8 +1531,8 @@ namespace dataPump.det
                                         #endregion
                                         //и вот она наша собранная строка 
                                         dll_command += "\n" + dll_argument + "\n" + dll_return + "\n" + dll_end;
-                                        dll_command = Regex.Replace(dll_command, @"\bTrim\b", "TRIM_", RegexOptions.IgnoreCase);
-                                        dll_command = Regex.Replace(dll_command, @"\bIIF\b", "IIF_", RegexOptions.IgnoreCase);
+                                        dll_command = regexTrim.Replace(dll_command, "TRIM_");
+                                        dll_command = regexIIF.Replace(dll_command, "IIF_");
                                         //теперь добавим ее в список команд
                                         com_udf.Add(dll_command);
                                     }
@@ -1562,6 +1561,9 @@ namespace dataPump.det
             }
 
         }
+
+        private static readonly Regex regexTrim = new Regex(@"\bTrim\b", RegexOptions.IgnoreCase);
+        private static readonly Regex regexIIF = new Regex(@"\bIIF\b", RegexOptions.IgnoreCase);
         #endregion
         #region DOMAINS
         public void m_DOMAINS()
@@ -2317,10 +2319,8 @@ namespace dataPump.det
                                             fcon_b.Parameters[0].Value = fr[0].ToString();
                                             using (FbDataReader fr_b = fcon_b.ExecuteReader())
                                             {
-                                                while (fr_b.Read())
-                                                {
-                                                    dll_command += "\n" + Regex.Replace(fr_b.GetString(0), @"\bTrim\b", "TRIM_", RegexOptions.IgnoreCase);
-                                                    dll_command = Regex.Replace(dll_command, @"\bIIF\b", "IIF_", RegexOptions.IgnoreCase);
+                                                while (fr_b.Read()) {                                                    
+                                                    dll_command += fr_b.GetString(0);
                                                     //.Replace("TRIM", "TRIM_").Replace("Trim", "TRIM_").Replace("trim", "TRIM_").Replace("IIF", "IIF_").Replace("iif", "IIF_").Replace("Iif", "IIF_");
                                                 }
                                                 fr_b.Dispose();
@@ -2332,6 +2332,8 @@ namespace dataPump.det
                                     {
                                         MessageBox.Show(ex.Message);
                                     }
+                                    dll_command = regexTrim.Replace(dll_command, "TRIM_");
+                                    dll_command = regexIIF.Replace(dll_command, "IIF_");
                                     com_procedures_content.Add(dll_command);
                                 }
                                 fr.Dispose();
@@ -2446,8 +2448,8 @@ namespace dataPump.det
                                         }
                                         fcon_b.Dispose();
                                     }
-                                    dll_command = Regex.Replace(dll_command, @"\bTrim\b", "TRIM_", RegexOptions.IgnoreCase);
-                                    dll_command = Regex.Replace(dll_command, @"\bIIF\b", "IIF_", RegexOptions.IgnoreCase);
+                                    dll_command = regexTrim.Replace(dll_command, "TRIM_");
+                                    dll_command = regexIIF.Replace(dll_command, "IIF_");
                                     com_triggers_content.Add(dll_command);
                                 }
                                 fr.Dispose();
